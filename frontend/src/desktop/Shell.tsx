@@ -2,6 +2,7 @@
 // Компьютер — меню сверху. Телефон — меню снизу.
 import type { ReactNode } from "react";
 import { useStore, type Screen } from "../store";
+import * as api from "../api";
 import { CoinsBadge } from "../components/Common";
 import { CalendarIcon, ChartIcon, HomeIcon, MapIcon, PlusIcon, ShopIcon, UserIcon } from "../components/Icons";
 import { HomePage } from "./HomePage";
@@ -90,7 +91,7 @@ export function Shell({ detail, desktop }: { detail: ReactNode; desktop: boolean
       )}
 
       {toast && <div className="toast site-toast" role="status">{toast}</div>}
-      <div className="demo-tag site-demo">демо-данные</div>
+      <div className="demo-tag site-demo">{api.dataSource() === "live" ? "данные с сервера" : "демо-данные"}</div>
     </div>
   );
 }

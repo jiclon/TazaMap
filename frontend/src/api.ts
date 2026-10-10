@@ -1,13 +1,77 @@
 // Все запросы к серверу собраны здесь.
-// Сейчас бэкенда нет, поэтому данные лежат прямо в памяти (демо).
-// Когда вы напишете эндпоинты, в каждой функции надо будет заменить
-// работу с массивом на fetch(...) — экраны менять не придётся.
+// Места и уборки берём с настоящего бэкенда (FastAPI на Render + Neon).
+// Если сервер не ответил за несколько секунд (на бесплатном Render он «спит»),
+// сайт переходит в демо-режим и показывает данные из памяти — так он работает всегда.
+// Остальное (профиль, рейтинг, магазин) пока демо: этих эндпоинтов в бэкенде ещё нет.
 
 import type { Purchase, Reward } from "./types";
 import type { Cleanup, Player, Spot, TrashLevel, User } from "./types";
 
-// Потом: адрес сервера на Render, как в Montiro (VITE_API_BASE)
-export const API_BASE = "http://localhost:8000";
+// Адрес бэкенда. Для локальной проверки: VITE_API_BASE=http://localhost:8000
+export const API_BASE: string = import.meta.env.VITE_API_BASE ?? "https://tazamap.onrender.com";
+
+// Откуда данные: "live" — с сервера, "demo" — из памяти. Решается один раз за визит.
+let source: "unknown" | "live" | "demo" = "unknown";
+let deciding: Promise<void> | null = null;
+export function dataSource() {
+  return source;
+}
+
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 8000): Promise<T> {
+  const ctrl = new AbortController();
+  const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(API_BASE + path, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) throw new Error(`Сервер ответил ${res.status}`);
+    return (await res.json()) as T;
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+// Уборка с сервера — без полей, которых в таблице cleanups пока нет
+type ApiCleanup = Omit<Cleanup, "participants" | "joined" | "after_image">;
+function fromApi(c: ApiCleanup): Cleanup {
+  return { ...c, participants: 1, joined: false, after_image: null };
+}
+
+// Пробуем сервер один раз; если не ответил за 4 секунды — демо до конца визита
+function decide(): Promise<void> {
+  if (!deciding) {
+    deciding = (async () => {
+      try {
+        const [s, c] = await Promise.all([
+          request<Spot[]>("/spots", undefined, 4000),
+          request<ApiCleanup[]>("/cleanups", undefined, 4000),
+        ]);
+        if (!Array.isArray(s) || s.length === 0) throw new Error("пусто");
+        spots = s;
+        cleanups = c.map(fromApi);
+        source = "live";
+      } catch {
+        source = "demo";
+      }
+    })();
+  }
+  return deciding;
+}
+
+// Изменения, которых сервер пока не умеет хранить (участие, завершение уборки)
+const spotPatch = new Map<number, Partial<Spot>>();
+const cleanupPatch = new Map<number, Partial<Cleanup>>();
+function patchSpots(list: Spot[]) {
+  return list.map((s) => ({ ...s, ...spotPatch.get(s.id) }));
+}
+function patchCleanups(list: Cleanup[]) {
+  return list.map((c) => {
+    const prev = cleanups.find((x) => x.id === c.id);
+    return { ...c, ...(prev ? { participants: prev.participants, joined: prev.joined } : {}), ...cleanupPatch.get(c.id) };
+  });
+}
 
 const now = new Date();
 function daysAgo(n: number): string {
@@ -159,12 +223,31 @@ const wait = () => new Promise((r) => setTimeout(r, 150));
 
 // GET /spots
 export async function getSpots(): Promise<Spot[]> {
+  await decide();
+  if (source === "live") {
+    try {
+      spots = await request<Spot[]>("/spots");
+    } catch {
+      /* сервер не ответил — показываем последнее, что знали */
+    }
+    return patchSpots(spots);
+  }
   await wait();
   return [...spots];
 }
 
 // GET /cleanups
 export async function getCleanups(): Promise<Cleanup[]> {
+  await decide();
+  if (source === "live") {
+    try {
+      const list = await request<ApiCleanup[]>("/cleanups");
+      cleanups = patchCleanups(list.map(fromApi));
+    } catch {
+      /* сервер не ответил — показываем последнее, что знали */
+    }
+    return [...cleanups];
+  }
   await wait();
   return [...cleanups];
 }
@@ -192,6 +275,19 @@ export async function createSpot(data: {
   image: string;
   trash_level: TrashLevel;
 }): Promise<Spot> {
+  await decide();
+  if (source === "live") {
+    // Длины как в models.py: title — 40, description — 120 символов
+    const body = {
+      ...data,
+      title: data.title.slice(0, 40),
+      description: data.description ? data.description.slice(0, 120) : null,
+    };
+    const spot = await request<Spot>("/spots", { method: "POST", body: JSON.stringify(body) });
+    spots = [...spots, spot];
+    user = { ...user, coins: user.coins + COINS.markSpot, xp: user.xp + COINS.markSpot, spots_marked: user.spots_marked + 1 };
+    return spot;
+  }
   await wait();
   const spot: Spot = {
     ...data,
@@ -211,6 +307,19 @@ export async function createCleanup(data: {
   gathering_place: string | null;
   chat_link: string | null;
 }): Promise<Cleanup> {
+  await decide();
+  if (source === "live") {
+    const body = {
+      ...data,
+      gathering_place: data.gathering_place ? data.gathering_place.slice(0, 80) : null,
+      chat_link: data.chat_link ? data.chat_link.slice(0, 200) : null,
+    };
+    const created = fromApi(await request<ApiCleanup>("/cleanups", { method: "POST", body: JSON.stringify(body) }));
+    const cleanup = { ...created, joined: true };
+    cleanupPatch.set(cleanup.id, { joined: true, participants: 1 });
+    cleanups = [...cleanups, cleanup];
+    return cleanup;
+  }
   await wait();
   const cleanup: Cleanup = {
     ...data,
@@ -231,7 +340,9 @@ export async function joinCleanup(id: number): Promise<Cleanup> {
   cleanups = cleanups.map((c) =>
     c.id === id && !c.joined ? { ...c, joined: true, participants: c.participants + 1 } : c,
   );
-  return cleanups.find((c) => c.id === id)!;
+  const joined = cleanups.find((c) => c.id === id)!;
+  cleanupPatch.set(id, { ...cleanupPatch.get(id), joined: joined.joined, participants: joined.participants });
+  return joined;
 }
 
 // POST /cleanups/{id}/leave
@@ -240,7 +351,9 @@ export async function leaveCleanup(id: number): Promise<Cleanup> {
   cleanups = cleanups.map((c) =>
     c.id === id && c.joined ? { ...c, joined: false, participants: c.participants - 1 } : c,
   );
-  return cleanups.find((c) => c.id === id)!;
+  const left = cleanups.find((c) => c.id === id)!;
+  cleanupPatch.set(id, { ...cleanupPatch.get(id), joined: left.joined, participants: left.participants });
+  return left;
 }
 
 // POST /cleanups/{id}/finish — фото «после», место становится чистым
@@ -251,6 +364,8 @@ export async function finishCleanup(id: number, afterImage: string): Promise<Cle
     c.id === id ? { ...c, status: "done", after_image: afterImage } : c,
   );
   spots = spots.map((s) => (s.id === cleanup.spot_id ? { ...s, status: "clean" } : s));
+  cleanupPatch.set(id, { ...cleanupPatch.get(id), status: "done", after_image: afterImage });
+  spotPatch.set(cleanup.spot_id, { status: "clean" });
   user = {
     ...user,
     coins: user.coins + COINS.participant,
