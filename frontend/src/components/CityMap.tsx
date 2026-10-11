@@ -54,10 +54,17 @@ export function CityMap({ spots, cleanups, onSpotClick, picking, picked, onPick 
   useEffect(() => {
     const host = hostRef.current!;
     const map = L.map(host, { zoomControl: false, attributionControl: true }).setView(CENTER, START_ZOOM);
-    // Открытые тайлы OpenStreetMap: без ключа, подходят для небольших проектов
+    // Нижний слой — OpenStreetMap (запасной: если 2GIS не загрузится, карта всё равно будет)
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(map);
+    // Верхний слой — 2GIS: подписи улиц на русском, хорошо знает города Казахстана.
+    // Для прототипа. Для настоящего запуска нужно оформить ключ 2GIS API.
+    L.tileLayer("https://tile{s}.maps.2gis.com/tiles?x={x}&y={y}&z={z}", {
+      maxZoom: 18,
+      subdomains: "0123",
+      attribution: '&copy; <a href="https://2gis.kz">2GIS</a>',
     }).addTo(map);
     map.attributionControl.setPrefix(false);
     markersRef.current = L.layerGroup().addTo(map);
