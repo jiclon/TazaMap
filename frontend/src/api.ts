@@ -39,21 +39,61 @@ function fromApi(c: ApiCleanup): Cleanup {
   return { ...c, participants: 1, joined: false, after_image: null };
 }
 
-// Пробуем сервер один раз; если не ответил за 4 секунды — демо до конца визита
+// Сервер «проснулся» и отдал данные — сообщаем приложению, чтобы оно перерисовалось
+let waking = false;
+export function isWaking() {
+  return waking;
+}
+const liveListeners = new Set<() => void>();
+export function onLive(cb: () => void) {
+  liveListeners.add(cb);
+  return () => {
+    liveListeners.delete(cb);
+  };
+}
+
+async function loadLive(timeoutMs: number): Promise<boolean> {
+  const [s, c] = await Promise.all([
+    request<Spot[]>("/spots", undefined, timeoutMs),
+    request<ApiCleanup[]>("/cleanups", undefined, timeoutMs),
+  ]);
+  if (!Array.isArray(s) || s.length === 0) return false; // база пустая — оставляем демо
+  spots = s;
+  cleanups = c.map(fromApi);
+  source = "live";
+  return true;
+}
+
+// Бесплатный Render засыпает и просыпается до минуты.
+// Пока он просыпается, показываем демо, а сервер ждём в фоне и потом переключаемся.
+async function wakeServer() {
+  waking = true;
+  liveListeners.forEach((cb) => cb());
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (await loadLive(60000)) {
+        waking = false;
+        liveListeners.forEach((cb) => cb());
+        return;
+      }
+      break; // сервер ответил, но мест нет — ждать нечего
+    } catch {
+      /* ещё не проснулся — пробуем снова */
+    }
+  }
+  waking = false;
+  liveListeners.forEach((cb) => cb());
+}
+
+// Пробуем сервер быстро; если не ответил за 4 секунды — демо, а сервер ждём в фоне
 function decide(): Promise<void> {
   if (!deciding) {
     deciding = (async () => {
       try {
-        const [s, c] = await Promise.all([
-          request<Spot[]>("/spots", undefined, 4000),
-          request<ApiCleanup[]>("/cleanups", undefined, 4000),
-        ]);
-        if (!Array.isArray(s) || s.length === 0) throw new Error("пусто");
-        spots = s;
-        cleanups = c.map(fromApi);
-        source = "live";
+        if (!(await loadLive(4000))) source = "demo";
       } catch {
         source = "demo";
+        void wakeServer();
       }
     })();
   }

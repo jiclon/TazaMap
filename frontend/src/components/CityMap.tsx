@@ -6,6 +6,7 @@ import "leaflet/dist/leaflet.css";
 import type { Cleanup, Spot } from "../types";
 import { plannedCleanupFor, spotState } from "../utils";
 import { ZoomInIcon, ZoomOutIcon } from "./Icons";
+import { dataSource } from "../api";
 
 // Центр Петропавловска
 const CENTER: L.LatLngTuple = [54.8667, 69.15];
@@ -44,7 +45,7 @@ export function CityMap({ spots, cleanups, onSpotClick, picking, picked, onPick 
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
   const pickedRef = useRef<L.Marker | null>(null);
-  const fittedRef = useRef(false);
+  const fittedRef = useRef<string | null>(null); // для каких данных (демо/сервер) уже подогнали масштаб
 
   // Свежие колбэки без пересоздания карты
   const cb = useRef({ onSpotClick, onPick, picking });
@@ -103,9 +104,10 @@ export function CityMap({ spots, cleanups, onSpotClick, picking, picked, onPick 
       });
       group.addLayer(m);
     }
-    // Первый раз показываем все места сразу
-    if (!fittedRef.current && spots.length > 0 && mapRef.current) {
-      fittedRef.current = true;
+    // Показываем все места сразу: при первой загрузке и когда демо сменилось данными с сервера
+    const src = dataSource();
+    if (fittedRef.current !== src && spots.length > 0 && mapRef.current) {
+      fittedRef.current = src;
       const bounds = L.latLngBounds(spots.map((s) => [s.latitude, s.longitude] as L.LatLngTuple));
       mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
     }

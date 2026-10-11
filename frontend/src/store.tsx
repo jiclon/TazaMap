@@ -60,6 +60,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     reload();
+    // Когда сервер проснётся — подгружаем настоящие данные вместо демо
+    return api.onLive(() => {
+      reload();
+    });
   }, [reload]);
 
   const showToast = useCallback((text: string) => {

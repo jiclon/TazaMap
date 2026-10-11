@@ -91,7 +91,11 @@ export function Shell({ detail, desktop }: { detail: ReactNode; desktop: boolean
       )}
 
       {toast && <div className="toast site-toast" role="status">{toast}</div>}
-      <div className="demo-tag site-demo">{api.dataSource() === "live" ? "данные с сервера" : "демо-данные"}</div>
+      <div className="demo-tag site-demo">{api.dataSource() === "live"
+          ? "данные с сервера"
+          : api.isWaking()
+            ? "сервер просыпается…"
+            : "демо-данные"}</div>
     </div>
   );
 }
