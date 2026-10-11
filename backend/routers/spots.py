@@ -35,6 +35,15 @@ def create_spot(spot: SpotCreate,db: Session = Depends(get_db)):
     return db_spot
 
 
-git add backend
-git commit -m "Add DELETE endpoints"
-git push
+@router.delete("/spots/{spot_id}", status_code=204)
+def spots_delete(spot_id: int, db: Session = Depends(get_db)):
+    db_spot = db.get(Spot, spot_id)
+
+    if db_spot is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Место не найдена"
+        )
+
+    db.delete(db_spot)
+    db.commit()
