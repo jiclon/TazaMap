@@ -35,4 +35,3 @@ def cleanups_delete(cleanup_id: int, db: Session = Depends(get_db)):
     db.delete(db_claenup)
     db.commit()
 
-    return db_claenup
