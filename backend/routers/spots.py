@@ -35,3 +35,6 @@ def create_spot(spot: SpotCreate,db: Session = Depends(get_db)):
     return db_spot
 
 
+git add backend
+git commit -m "Add DELETE endpoints"
+git push

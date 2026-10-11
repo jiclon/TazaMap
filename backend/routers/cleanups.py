@@ -20,3 +20,19 @@ def create_cleanup(cleanup: CleanupCreate, db: Session = Depends(get_db)):
     db.refresh(db_cleanup)
 
     return db_cleanup
+
+
+@router.delete("/cleanups/{cleanup_id}",status_code=204)
+def cleanups_delete(cleanup_id: int, db: Session = Depends(get_db)):
+    db_claenup = db.get(Cleanup, cleanup_id)
+
+    if db_claenup is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Уборка не найдена"
+        )
+    
+    db.delete(db_claenup)
+    db.commit()
+
+    return db_claenup
