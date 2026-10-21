@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from database import engine, Base
-from routers import spots, cleanups
+from routers import spots, cleanups,users
 import models
 
 app = FastAPI()
@@ -20,3 +20,4 @@ app.add_middleware(
 # 4. подключить роутеры
 app.include_router(spots.router)
 app.include_router(cleanups.router)
+app.include_router(users.router)
