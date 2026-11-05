@@ -1,6 +1,7 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints 
 from datetime import datetime
 from models import UserRole
+from typing import Annotated
 
 class SpotCreate(BaseModel):
     title: str 
@@ -29,8 +30,8 @@ class CleanupOut(CleanupCreate):
     model_config = ConfigDict(from_attributes=True)
 
 class UserCreate(BaseModel):
-    phone: str = Field(pattern=r"^\+?\d{10,15}$")
-    name: str = Field(min_length=1, max_length=40)
+    phone: str = Field(pattern=r"^\+7\d{10}$")
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=40)]
 
 class UserOut(BaseModel):
     id: int 

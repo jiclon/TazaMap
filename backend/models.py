@@ -47,6 +47,7 @@ class User(Base):
     phone: Mapped[str] = mapped_column(String(20), unique=True) 
     name: Mapped[str] = mapped_column(String(40))
     role: Mapped[UserRole] =  mapped_column(Enum(UserRole), default=UserRole.user)
+    xp: Mapped[int] = mapped_column(server_default="0")
     trust: Mapped[int] = mapped_column(default=0)
     is_verified: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
