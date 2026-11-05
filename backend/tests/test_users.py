@@ -37,3 +37,15 @@ def test_invalid_name(client, bad_name):
 def test_get_user_not_found(client):
     response = client.get("/users/9999")
     assert response.status_code == 404
+
+def test_new_user_xp_is_zero(client):
+    data = {"phone": "+77010000005", "name": "Серик"}
+    response = client.post("/users", json=data)
+    assert response.status_code == 201
+    assert response.json()["xp"] == 0
+
+def test_xp_cannot_be_set_on_create(client):
+    data = {"phone": "+77010000005", "name": "Алишер", "xp": 9999}
+    response = client.post("/users", json=data)
+    assert response.status_code == 201 
+    assert response.json()["xp"] == 0

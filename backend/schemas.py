@@ -38,6 +38,7 @@ class UserOut(BaseModel):
     name: str 
     role: UserRole
     trust: int 
+    xp: int
     is_verified: bool 
     created_at: datetime
     model_config = ConfigDict(from_attributes=True)
