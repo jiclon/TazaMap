@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from models import User
 from schemas import UserCreate, UserOut
 from dependencies import get_db 
+from security import hash_password
 
 router = APIRouter()
 
@@ -14,7 +15,7 @@ def get_id(user_id: int, db: Session = Depends(get_db)):
     if db_user is None:
         raise HTTPException(
             status_code=404, 
-            detail="Пользователь не найден"
+            detail="user_not_found"
         )
     return db_user
 
@@ -25,12 +26,13 @@ def create_user(user: UserCreate,db: Session = Depends(get_db)):
     if db_user is not None:
         raise HTTPException(
             status_code=409,
-            detail="Пользователь с таким номером уже существует"
+            detail="phone_taken"
         )
 
     new_user = User(
         phone=user.phone,
-        name=user.name
+        name=user.name,
+        password_hash=hash_password(user.password)
     )
 
     db.add(new_user)

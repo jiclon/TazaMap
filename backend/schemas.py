@@ -32,6 +32,7 @@ class CleanupOut(CleanupCreate):
 class UserCreate(BaseModel):
     phone: str = Field(pattern=r"^\+7\d{10}$")
     name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=40)]
+    password: str = Field(min_length=8, max_length=128)
 
 class UserOut(BaseModel):
     id: int 
