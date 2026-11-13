@@ -1,4 +1,5 @@
 import pytest
+
 def test_create_user(client):
     data = {"phone": "+77010000001", "name": "Али", "password": "secret123"}
     response = client.post("/users", json=data)
