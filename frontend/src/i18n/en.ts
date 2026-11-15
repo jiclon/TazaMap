@@ -79,8 +79,6 @@ export const en: Dict = {
   step2_text: "Create a cleanup for a set time or just show up. The Telegram chat opens in one tap.",
   step3_title: "Show the “after”",
   step3_text: "A photo of the result, three participants confirm it, and everyone gets coins.",
-  quote_text: "“There are places I’ll never see, but they need help”",
-  quote_author: "a volunteer who cleans the city himself and films it for Instagram",
   upcoming_title: "Upcoming cleanups",
   all_cleanups: "All cleanups →",
 

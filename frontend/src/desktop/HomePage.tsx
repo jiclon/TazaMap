@@ -92,11 +92,6 @@ export function HomePage() {
         </ol>
       </section>
 
-      <section className="quote">
-        <p>{t("quote_text")}</p>
-        <span>{t("quote_author")}</span>
-      </section>
-
       <section className="faq">
         <h2 className="section-title">{t("faq_title")}</h2>
         <div className="faq-list">
