@@ -12,8 +12,8 @@ Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],      
-    allow_methods=["*"],
+    allow_origins=True,      
+    allow_origins=["https://taza-map.vercel.app"],
     allow_headers=["*"],
 )
 
