@@ -388,7 +388,9 @@ function nextWeekday(day: number, hour: number): string {
   return d.toISOString();
 }
 
-let spots: Spot[] = [
+// Примеры мест и уборок — только для режима прототипа (DEMO).
+// В обычной сборке массивы пустые: пока сервер не ответил, карта пустая, а не с выдуманными точками.
+const DEMO_SPOTS: Spot[] = [
   {
     id: 1,
     title: "Берег Ишима у моста",
@@ -457,7 +459,7 @@ let spots: Spot[] = [
   },
 ];
 
-let cleanups: Cleanup[] = [
+const DEMO_CLEANUPS: Cleanup[] = [
   {
     id: 1,
     spot_id: 3,
@@ -495,6 +497,9 @@ let cleanups: Cleanup[] = [
     after_image: null,
   },
 ];
+
+let spots: Spot[] = DEMO ? DEMO_SPOTS : [];
+let cleanups: Cleanup[] = DEMO ? DEMO_CLEANUPS : [];
 
 // Демо-профиль — только для режима прототипа
 let demoUser: User = {
@@ -547,7 +552,10 @@ export async function getDemoUser(): Promise<User> {
 // GET /rating — пока пример
 export async function getRating(): Promise<Player[]> {
   await wait();
-  const list = DEMO ? [...players, { name: demoUser.name, coins: demoUser.xp, me: true }] : [...players];
+  // Эндпоинта рейтинга на сервере ещё нет: в обычной сборке список пустой,
+  // экран показывает «рейтинг появится после запуска».
+  if (!DEMO) return [];
+  const list = [...players, { name: demoUser.name, coins: demoUser.xp, me: true }];
   return list.sort((a, b) => b.coins - a.coins);
 }
 
@@ -592,6 +600,7 @@ export async function createSpot(data: {
   if (source === "live") {
     spots = [...spots, spot];
   } else {
+    // Место сохранено, значит, сервер проснулся: переходим на его данные
     await switchToLive(() => {
       spots = [spot];
       cleanups = [];

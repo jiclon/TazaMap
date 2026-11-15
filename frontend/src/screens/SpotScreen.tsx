@@ -14,8 +14,8 @@ export function SpotScreen({ id }: { id: number }) {
   const state = spotState(spot, cleanups);
   const planned = plannedCleanupFor(spot, cleanups);
   const done = cleanups.filter((c) => c.spot_id === spot.id && c.status === "done");
-  // Пока сервер не ответил, на карте примеры: создавать для них уборки нельзя
-  const example = serverState() === "waking" || serverState() === "offline";
+  // Сервер ещё не ответил: уборку создавать не на чем
+  const example = serverState() !== "live" && serverState() !== "demo";
 
   return (
     <div className="screen">

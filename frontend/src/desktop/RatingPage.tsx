@@ -15,6 +15,7 @@ export function RatingPage() {
     getRating().then(setPlayers);
   }, [user?.coins]);
 
+  const empty = players.length === 0;
   const top = players.slice(0, 3);
   const rest = players.slice(3);
   const myPlace = players.findIndex((p) => p.me) + 1;
@@ -32,7 +33,7 @@ export function RatingPage() {
       </div>
       {!DEMO && <p className="note">{t("rating_demo_note")}</p>}
       <div className="rating-layout">
-        <div className="stack">
+        <div className="stack">{!empty && (<>
           <div className="podium">
             {podium.map((p) => {
               const place = players.indexOf(p) + 1;
@@ -59,7 +60,7 @@ export function RatingPage() {
               </li>
             ))}
           </ol>
-        </div>
+        </>)}</div>
 
         <aside className="stack">
           {me && (
