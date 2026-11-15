@@ -567,3 +567,14 @@ dialog.sheet::backdrop { background: rgba(8, 14, 10, 0.55); overflow: hidden; ov
 @media (max-width: 419px) {
   .pill.level { display: none; }
 }
+
+/* ---------- Частые вопросы ---------- */
+.faq-list { display: flex; flex-direction: column; gap: 8px; }
+.faq-list details { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.faq-list details[open] { border-color: var(--green); }
+.faq-list summary { padding: 16px 18px; font-weight: 800; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.faq-list summary::-webkit-details-marker { display: none; }
+.faq-list summary::after { content: "+"; font-size: 22px; font-weight: 700; color: var(--green); line-height: 1; flex-shrink: 0; }
+.faq-list details[open] summary::after { content: "−"; }
+.faq-list summary:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+.faq-list p { margin: 0; padding: 0 18px 18px; color: var(--muted); line-height: 1.55; }

@@ -5,6 +5,10 @@ import { CoinIcon } from "../components/Icons";
 import { COINS } from "../api";
 import { DEMO, PROMO_FIRST_20 } from "../config";
 import { CleanupCard } from "./CleanupsPage";
+import type { DictKey } from "../i18n";
+
+// Вопросы и ответы: тексты лежат в словарях (faq_q1/faq_a1 и так далее)
+const FAQ = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 export function HomePage() {
   const { spots, cleanups, user, go, tab, startMarking } = useStore();
@@ -91,6 +95,18 @@ export function HomePage() {
       <section className="quote">
         <p>{t("quote_text")}</p>
         <span>{t("quote_author")}</span>
+      </section>
+
+      <section className="faq">
+        <h2 className="section-title">{t("faq_title")}</h2>
+        <div className="faq-list">
+          {FAQ.map((n) => (
+            <details key={n}>
+              <summary>{t(`faq_q${n}` as DictKey)}</summary>
+              <p>{t(`faq_a${n}` as DictKey)}</p>
+            </details>
+          ))}
+        </div>
       </section>
 
       <section>
