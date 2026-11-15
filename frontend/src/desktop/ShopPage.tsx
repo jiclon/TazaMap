@@ -1,19 +1,23 @@
 // Магазин наград: монеты за уборки меняются на промокоды и скидки партнёров.
 import { useEffect, useState } from "react";
 import { useStore } from "../store";
+import { useI18n, type DictKey } from "../i18n";
 import { buyReward, getPurchases, getRewards } from "../api";
+import { DEMO, SERVER_CAN } from "../config";
 import type { Purchase, Reward } from "../types";
+import { Modal } from "../components/Common";
 import { CoinIcon } from "../components/Icons";
-import { formatNumber } from "../utils";
+import { errorKey } from "../utils";
 
-const KIND_LABEL: Record<Reward["kind"], string> = {
-  promo: "Промокод",
-  discount: "Скидка",
-  merch: "От TazaMap",
+const KIND_LABEL: Record<Reward["kind"], DictKey> = {
+  promo: "kind_promo",
+  discount: "kind_discount",
+  merch: "kind_merch",
 };
 
 export function ShopPage() {
-  const { user, reload, showToast } = useStore();
+  const { user, reload, showToast, go } = useStore();
+  const { t, rich, num } = useI18n();
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [confirm, setConfirm] = useState<Reward | null>(null);
@@ -25,7 +29,12 @@ export function ShopPage() {
     getPurchases().then(setPurchases);
   }, []);
 
-  if (!user) return null;
+  const canBuy = DEMO || SERVER_CAN.buyReward;
+  const coins = user?.coins ?? 0;
+
+  // У наград-примеров тексты лежат в словаре: reward_1_title, reward_1_partner, reward_1_text
+  const text = (r: { id: number; demo?: boolean }, part: "title" | "partner" | "text", own: string) =>
+    r.demo ? t(`reward_${r.id}_${part}` as DictKey) : own;
 
   async function buy(reward: Reward) {
     setBusy(true);
@@ -33,9 +42,9 @@ export function ShopPage() {
       const p = await buyReward(reward.id);
       setPurchases((list) => [p, ...list]);
       await reload();
-      showToast(`Готово! Промокод ${p.code}`);
+      showToast(t("bought_toast", { code: p.code }));
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "Не получилось");
+      showToast(t(errorKey(e)));
     } finally {
       setBusy(false);
       setConfirm(null);
@@ -52,31 +61,40 @@ export function ShopPage() {
     <div className="page">
       <div className="shop-head">
         <div className="page-head">
-          <h1 className="page-h1">Магазин наград</h1>
-          <p className="muted">Монеты за уборки — на кофе, скидки и промокоды партнёров</p>
+          <h1 className="page-h1">{t("shop_title")}</h1>
+          <p className="muted">{t("shop_sub")}</p>
         </div>
-        <div className="balance">
-          <span className="muted small">На счету</span>
-          <b><CoinIcon size={22} /> {formatNumber(user.coins)}</b>
-        </div>
+        {user ? (
+          <div className="balance">
+            <span className="muted small">{t("on_account")}</span>
+            <b><CoinIcon size={22} /> {num(coins)}</b>
+          </div>
+        ) : (
+          <button className="btn primary" onClick={() => go({ name: "auth", mode: "login" })}>{t("sign_in")}</button>
+        )}
       </div>
+
+      {!DEMO && <p className="note">{t("shop_demo_note")} {t(user ? "shop_soon" : "shop_login_hint")}</p>}
 
       <div className="shop-grid">
         {rewards.map((r) => {
-          const lack = r.price - user.coins;
+          const lack = r.price - coins;
+          const locked = !canBuy || lack > 0;
           return (
-            <article key={r.id} className={lack > 0 ? "shop-item locked" : "shop-item"}>
-              <span className={`chip kind-${r.kind}`}>{KIND_LABEL[r.kind]}</span>
+            <article key={r.id} className={locked ? "shop-item locked" : "shop-item"}>
+              <span className={`chip kind-${r.kind}`}>{t(KIND_LABEL[r.kind])}</span>
               <div className="stack-xs">
-                <b className="shop-title">{r.title}</b>
-                <span className="muted small">{r.partner} · {r.description}</span>
+                <b className="shop-title">{text(r, "title", r.title)}</b>
+                <span className="muted small">{text(r, "partner", r.partner)} · {text(r, "text", r.description)}</span>
               </div>
               <div className="row-between">
-                <span className="reward-num"><CoinIcon size={16} /> {formatNumber(r.price)}</span>
-                {lack > 0 ? (
-                  <span className="muted small">не хватает {formatNumber(lack)}</span>
+                <span className="reward-num"><CoinIcon size={16} /> {num(r.price)}</span>
+                {!canBuy ? (
+                  <span className="muted small">{t("exchange_soon")}</span>
+                ) : lack > 0 ? (
+                  <span className="muted small">{t("lack", { n: lack })}</span>
                 ) : (
-                  <button className="btn primary small-btn" onClick={() => setConfirm(r)}>Обменять</button>
+                  <button className="btn primary small-btn" onClick={() => setConfirm(r)}>{t("exchange")}</button>
                 )}
               </div>
             </article>
@@ -84,45 +102,47 @@ export function ShopPage() {
         })}
       </div>
 
-      <section className="card stack-sm">
-        <span className="card-title">Мои промокоды</span>
-        {purchases.length === 0 ? (
-          <p className="muted">Пока пусто. Обменяйте монеты — промокод появится здесь.</p>
-        ) : (
-          purchases.map((p) => (
-            <div key={p.id} className="promo-row">
-              <div className="grow stack-xs">
-                <b>{p.title}</b>
-                <span className="muted small">{p.partner}</span>
-              </div>
-              <code className="promo-code">{p.code}</code>
-              <button className="btn ghost small-btn" onClick={() => copy(p)}>
-                {copied === p.id ? "Скопировано" : "Копировать"}
-              </button>
-            </div>
-          ))
-        )}
-      </section>
-
-      <p className="muted small">Демо: партнёры и промокоды появятся после запуска. Промокоды закупаются на грант и у партнёров.</p>
-
-      {confirm && (
-        <div className="sheet-backdrop" onClick={() => !busy && setConfirm(null)}>
-          <div className="sheet" role="dialog" aria-modal="true" aria-label="Подтверждение обмена" onClick={(e) => e.stopPropagation()}>
-            <b className="shop-title">{confirm.title}</b>
-            <p className="muted">
-              Спишем <b className="tabular">{formatNumber(confirm.price)}</b> монет. Останется{" "}
-              <b className="tabular">{formatNumber(user.coins - confirm.price)}</b>.
-            </p>
-            <div className="sheet-actions">
-              <button className="btn ghost" onClick={() => setConfirm(null)} disabled={busy}>Отмена</button>
-              <button className="btn primary" onClick={() => buy(confirm)} disabled={busy}>
-                {busy ? "Обмениваем…" : "Обменять"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {canBuy && (
+        <section className="card stack-sm">
+          <span className="card-title">{t("my_codes")}</span>
+          {purchases.length === 0 ? (
+            <p className="muted">{t("codes_empty")}</p>
+          ) : (
+            purchases.map((p) => {
+              const r = rewards.find((x) => x.id === p.reward_id);
+              return (
+                <div key={p.id} className="promo-row">
+                  <div className="grow stack-xs">
+                    <b>{r ? text(r, "title", p.title) : p.title}</b>
+                    <span className="muted small">{r ? text(r, "partner", p.partner) : p.partner}</span>
+                  </div>
+                  <code className="promo-code">{p.code}</code>
+                  <button className="btn ghost small-btn" onClick={() => copy(p)}>
+                    {t(copied === p.id ? "copied" : "copy")}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </section>
       )}
+
+      {DEMO && <p className="muted small">{t("shop_demo_note")}</p>}
+
+      <Modal open={confirm !== null} onClose={() => !busy && setConfirm(null)} labelledBy="confirm-title">
+        {confirm && (
+          <>
+            <b id="confirm-title" className="shop-title">{text(confirm, "title", confirm.title)}</b>
+            <p className="muted">{rich("confirm_text", { price: confirm.price, left: coins - confirm.price })}</p>
+            <div className="sheet-actions">
+              <button className="btn ghost" onClick={() => setConfirm(null)} disabled={busy}>{t("cancel")}</button>
+              <button className="btn primary" onClick={() => buy(confirm)} disabled={busy}>
+                {t(busy ? "exchanging" : "exchange")}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   );
 }

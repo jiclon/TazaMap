@@ -6,7 +6,8 @@ import "leaflet/dist/leaflet.css";
 import type { Cleanup, Spot } from "../types";
 import { plannedCleanupFor, spotState } from "../utils";
 import { ZoomInIcon, ZoomOutIcon } from "./Icons";
-import { dataSource } from "../api";
+import { serverState } from "../api";
+import { useI18n } from "../i18n";
 
 // Центр Петропавловска
 const CENTER: L.LatLngTuple = [54.8667, 69.15];
@@ -19,8 +20,6 @@ interface Props {
   picking?: boolean;
   picked?: { latitude: number; longitude: number } | null;
   onPick?: (p: { latitude: number; longitude: number }) => void;
-  // Оставлено для совместимости со старой схемой: живая карта всегда заполняет блок
-  fit?: "slice" | "meet";
 }
 
 function markerIcon(state: "dirty" | "planned" | "clean", count?: number) {
@@ -41,6 +40,7 @@ const pickedIcon = L.divIcon({
 });
 
 export function CityMap({ spots, cleanups, onSpotClick, picking, picked, onPick }: Props) {
+  const { t } = useI18n();
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup | null>(null);
@@ -105,7 +105,7 @@ export function CityMap({ spots, cleanups, onSpotClick, picking, picked, onPick 
       group.addLayer(m);
     }
     // Показываем все места сразу: при первой загрузке и когда демо сменилось данными с сервера
-    const src = dataSource();
+    const src = serverState();
     if (fittedRef.current !== src && spots.length > 0 && mapRef.current) {
       fittedRef.current = src;
       const bounds = L.latLngBounds(spots.map((s) => [s.latitude, s.longitude] as L.LatLngTuple));
@@ -126,18 +126,18 @@ export function CityMap({ spots, cleanups, onSpotClick, picking, picked, onPick 
 
   return (
     <div className={picking ? "map picking" : "map"}>
-      <div ref={hostRef} className="leaflet-host" role="region" aria-label="Карта Петропавловска с отмеченными местами" />
+      <div ref={hostRef} className="leaflet-host" role="region" aria-label={t("map_aria")} />
 
       {!picking && (
         <div className="legend">
-          <span><i style={{ background: "var(--red)" }} />Грязно</span>
-          <span><i style={{ background: "var(--amber)" }} />Уборка назначена</span>
-          <span><i style={{ background: "var(--green)" }} />Убрано</span>
+          <span><i style={{ background: "var(--red-solid)" }} />{t("state_dirty")}</span>
+          <span><i style={{ background: "var(--amber)" }} />{t("state_planned")}</span>
+          <span><i style={{ background: "var(--green-solid)" }} />{t("state_clean")}</span>
         </div>
       )}
       <div className="zoom">
-        <button onClick={() => mapRef.current?.zoomIn()} aria-label="Приблизить"><ZoomInIcon /></button>
-        <button onClick={() => mapRef.current?.zoomOut()} aria-label="Отдалить"><ZoomOutIcon /></button>
+        <button onClick={() => mapRef.current?.zoomIn()} aria-label={t("zoom_in")}><ZoomInIcon /></button>
+        <button onClick={() => mapRef.current?.zoomOut()} aria-label={t("zoom_out")}><ZoomOutIcon /></button>
       </div>
     </div>
   );

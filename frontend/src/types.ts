@@ -14,6 +14,7 @@ export interface Spot {
   trash_level: TrashLevel;
   status: "dirty" | "clean";
   created_at: string; // дата приходит из API строкой: "2026-10-02T17:30:00"
+  user_id?: number | null; // кто отметил место (появится, когда бэкенд начнёт отдавать это поле)
 }
 
 // Таблица cleanups
@@ -32,6 +33,20 @@ export interface Cleanup {
   after_image: string | null;
 }
 
+// Аккаунт с сервера — то, что отдаёт схема UserOut (POST /users, GET /me, GET /users/{id})
+export interface Account {
+  id: number;
+  name: string;
+  role: string;
+  trust: number;
+  xp?: number;
+  is_verified: boolean;
+  created_at: string;
+  coins?: number; // монет в бэкенде пока нет — появится позже
+}
+
+// Профиль для экранов: в обычном режиме собирается из Account (см. store.tsx),
+// в режиме прототипа — демо-профиль из api.ts
 export interface User {
   name: string;
   coins: number; // баланс: сколько можно потратить в магазине
@@ -50,6 +65,7 @@ export interface Reward {
   description: string;
   price: number; // в монетах
   kind: "promo" | "discount" | "merch";
+  demo?: boolean; // пример награды: тексты берутся из словаря (reward_1_title и т.д.)
 }
 
 // Таблица purchases — что пользователь купил

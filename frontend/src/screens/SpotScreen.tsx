@@ -1,32 +1,37 @@
 import { useStore } from "../store";
+import { useI18n } from "../i18n";
 import { Photo, TopBar } from "../components/Common";
 import { CoinIcon } from "../components/Icons";
-import { COINS } from "../api";
-import { STATE_LABEL, TRASH_LABEL, formatDateTime, plannedCleanupFor, spotState, timeAgo } from "../utils";
+import { COINS, serverState } from "../api";
+import { plannedCleanupFor, spotState, stateKey, trashKey } from "../utils";
 
 export function SpotScreen({ id }: { id: number }) {
-  const { spots, cleanups, go } = useStore();
+  const { spots, cleanups, go, requireAuth, showToast } = useStore();
+  const { t, rich, dateTime, ago } = useI18n();
   const spot = spots.find((s) => s.id === id);
   if (!spot) return null;
 
   const state = spotState(spot, cleanups);
   const planned = plannedCleanupFor(spot, cleanups);
   const done = cleanups.filter((c) => c.spot_id === spot.id && c.status === "done");
+  // Пока сервер не ответил, на карте примеры: создавать для них уборки нельзя
+  const example = serverState() === "waking" || serverState() === "offline";
 
   return (
     <div className="screen">
-      <TopBar title="Место" />
+      <TopBar title={t("spot_title")} />
       <div className="scroll">
-        <Photo src={spot.image} label="Фото «до»" tone={state === "clean" ? "clean" : "dirty"} />
+        <Photo src={spot.image || null} label={t("photo_before")} tone={state === "clean" ? "clean" : "dirty"} />
         <div className="stack">
           <div className="chips">
-            <span className={`chip state-${state}`}>{STATE_LABEL[state]}</span>
-            <span className="chip">{TRASH_LABEL[spot.trash_level]}</span>
+            <span className={`chip state-${state}`}>{t(stateKey(state))}</span>
+            <span className="chip">{t(trashKey(spot.trash_level))}</span>
+            {example && <span className="chip dark">{t("example")}</span>}
           </div>
           <div>
             <h2 className="h2">{spot.title}</h2>
             <p className="muted small">
-              Отмечено {timeAgo(spot.created_at)} · {spot.latitude.toFixed(4)}° N, {spot.longitude.toFixed(4)}° E
+              {t("marked_when", { when: ago(spot.created_at) })} · {spot.latitude.toFixed(4)}° N, {spot.longitude.toFixed(4)}° E
             </p>
           </div>
           {spot.description && <p className="body">{spot.description}</p>}
@@ -34,34 +39,37 @@ export function SpotScreen({ id }: { id: number }) {
           {state === "dirty" && (
             <div className="reward">
               <CoinIcon size={20} />
-              <div>
-                <b>+{COINS.organizer} монет</b> организатору, <b>+{COINS.participant}</b> каждому участнику после
-                подтверждения
-              </div>
+              <div>{rich("reward_text", { org: COINS.organizer, part: COINS.participant })}</div>
             </div>
           )}
 
           {planned && (
             <button className="card next-card" onClick={() => go({ name: "cleanup", id: planned.id })}>
-              <span className="eyebrow amber">Уборка назначена</span>
-              <div className="card-title">{formatDateTime(planned.starts_at)}</div>
-              <span className="muted small">Идут {planned.participants} · нажмите, чтобы присоединиться</span>
+              <span className="eyebrow amber">{t("state_planned")}</span>
+              <div className="card-title">{dateTime(planned.starts_at)}</div>
+              <span className="muted small">{t("going_join", { n: planned.participants })}</span>
             </button>
           )}
 
           {state === "clean" && done[0] && (
             <button className="card" onClick={() => go({ name: "cleanup", id: done[0].id })}>
-              <span className="eyebrow green">Убрано</span>
-              <div className="card-title">Уборка {formatDateTime(done[0].starts_at)}</div>
-              <span className="muted small">Участников: {done[0].participants} · посмотреть «до/после»</span>
+              <span className="eyebrow green">{t("state_clean")}</span>
+              <div className="card-title">{t("cleanup_on", { date: dateTime(done[0].starts_at) })}</div>
+              <span className="muted small">{t("participants_see", { n: done[0].participants })}</span>
             </button>
           )}
         </div>
       </div>
       {state === "dirty" && (
         <div className="bottom-actions column">
-          <button className="btn primary big" onClick={() => go({ name: "newCleanup", spotId: spot.id })}>
-            Организовать уборку
+          <button
+            className="btn primary big"
+            onClick={() => {
+              if (example) showToast(t("example_spot_hint"));
+              else requireAuth(() => go({ name: "newCleanup", spotId: spot.id }));
+            }}
+          >
+            {t("organize")}
           </button>
         </div>
       )}

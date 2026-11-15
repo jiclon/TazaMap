@@ -1,96 +1,352 @@
 // Все запросы к серверу собраны здесь.
-// Места и уборки берём с настоящего бэкенда (FastAPI на Render + Neon).
-// Если сервер не ответил за несколько секунд (на бесплатном Render он «спит»),
-// сайт переходит в демо-режим и показывает данные из памяти — так он работает всегда.
-// Остальное (профиль, рейтинг, магазин) пока демо: этих эндпоинтов в бэкенде ещё нет.
+//
+// Обычная сборка (Vercel): места, уборки и аккаунт — с настоящего бэкенда (FastAPI на Render + Neon).
+// Бесплатный Render «спит» и просыпается до минуты. Пока он просыпается, сайт показывает
+// примеры мест с пометкой, а всё, что человек отправляет (регистрация, новое место, уборка),
+// идёт только на сервер: если сервер не ответил — показываем ошибку, а не ложный успех.
+//
+// Режим прототипа (config.ts → DEMO): сервер не трогаем совсем, всё живёт в памяти.
+//
+// Рейтинг и магазин пока примеры: этих эндпоинтов в бэкенде ещё нет.
 
-import type { Purchase, Reward } from "./types";
-import type { Cleanup, Player, Spot, TrashLevel, User } from "./types";
+import { API_BASE, DEMO } from "./config";
+import type { Account, Cleanup, Player, Purchase, Reward, Spot, TrashLevel, User } from "./types";
 
-// Адрес бэкенда. Для локальной проверки: VITE_API_BASE=http://localhost:8000
-export const API_BASE: string = import.meta.env.VITE_API_BASE ?? "https://tazamap.onrender.com";
+// ---------- Ошибки ----------
+// Код ошибки → текст на нужном языке выбирает интерфейс (см. errorKey в utils.ts).
+// Первые коды присылает сам бэкенд в поле detail.
+const SERVER_CODES = [
+  "phone_taken",
+  "invalid_credentials",
+  "not_authenticated",
+  "user_not_found",
+  "invalid_phone",
+  "invalid_name",
+  "invalid_password",
+  "invalid_input",
+] as const;
 
-// Откуда данные: "live" — с сервера, "demo" — из памяти. Решается один раз за визит.
-let source: "unknown" | "live" | "demo" = "unknown";
-let deciding: Promise<void> | null = null;
-export function dataSource() {
-  return source;
+export type ErrorCode =
+  | (typeof SERVER_CODES)[number]
+  | "network" // нет связи
+  | "timeout" // сервер не ответил вовремя
+  | "server" // ошибка 5xx
+  | "too_many" // 429: слишком много запросов
+  | "not_found" // 404: такого адреса на сервере нет
+  | "auth_unavailable" // на сервере ещё нет регистрации и входа
+  | "not_enough_coins"
+  | "reward_not_found"
+  | "unknown";
+
+export class ApiError extends Error {
+  code: ErrorCode;
+  status: number;
+  field?: string; // какое поле не понравилось серверу (для ошибок 422)
+  constructor(code: ErrorCode, status = 0, field?: string) {
+    super(code);
+    this.name = "ApiError";
+    this.code = code;
+    this.status = status;
+    this.field = field;
+  }
 }
 
-async function request<T>(path: string, init?: RequestInit, timeoutMs = 8000): Promise<T> {
+function isServerCode(v: unknown): v is (typeof SERVER_CODES)[number] {
+  return typeof v === "string" && (SERVER_CODES as readonly string[]).includes(v);
+}
+
+async function toApiError(res: Response): Promise<ApiError> {
+  let detail: unknown = null;
+  try {
+    detail = (await res.json())?.detail;
+  } catch {
+    /* ответ не JSON — разберёмся по статусу */
+  }
+  const s = res.status;
+  if (isServerCode(detail)) return new ApiError(detail, s);
+  // Стандартная ошибка проверки данных FastAPI: [{ loc: ["body", "phone"], msg: "…" }]
+  if (Array.isArray(detail) && detail.length > 0) {
+    const loc: unknown = detail[0]?.loc;
+    const field = Array.isArray(loc) ? String(loc[loc.length - 1]) : undefined;
+    const code: ErrorCode =
+      field === "phone" ? "invalid_phone"
+      : field === "name" ? "invalid_name"
+      : field === "password" ? "invalid_password"
+      : "invalid_input";
+    return new ApiError(code, s, field);
+  }
+  if (s === 401) return new ApiError("not_authenticated", s);
+  if (s === 404 || s === 405) return new ApiError("not_found", s);
+  if (s === 422) return new ApiError("invalid_input", s);
+  if (s === 429) return new ApiError("too_many", s);
+  if (s >= 500) return new ApiError("server", s);
+  return new ApiError("unknown", s);
+}
+
+// ---------- Запрос ----------
+const QUICK = 8000; // обычный запрос
+const PATIENT = 70000; // отправка данных: ждём, пока Render проснётся
+
+interface RequestOptions {
+  method?: "GET" | "POST";
+  body?: unknown;
+  auth?: boolean; // приложить токен входа
+  timeoutMs?: number;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { method = "GET", body, auth = false, timeoutMs = QUICK } = options;
+  // Заголовки добавляем только когда они нужны: простой GET уходит без предварительного
+  // запроса CORS, и «спящий» сервер просыпается быстрее.
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (auth && token) headers["Authorization"] = `Bearer ${token}`;
+
   const ctrl = new AbortController();
   const timer = window.setTimeout(() => ctrl.abort(), timeoutMs);
+  let res: Response;
   try {
-    const res = await fetch(API_BASE + path, {
-      ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    res = await fetch(API_BASE + path, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: ctrl.signal,
     });
-    if (!res.ok) throw new Error(`Сервер ответил ${res.status}`);
-    return (await res.json()) as T;
+  } catch {
+    throw new ApiError(ctrl.signal.aborted ? "timeout" : "network");
   } finally {
     window.clearTimeout(timer);
   }
+  if (!res.ok) throw await toApiError(res);
+  return (await res.json()) as T;
+}
+
+// ---------- Вход и аккаунт ----------
+// Токен (JWT) выдаёт POST /login. Храним его в localStorage, чтобы вход не слетал
+// после перезагрузки страницы. Пароль не хранится нигде.
+const TOKEN_KEY = "tazamap.token";
+const ACCOUNT_KEY = "tazamap.account";
+
+function readStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function writeStorage(key: string, value: string | null) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  } catch {
+    /* хранилище недоступно — вход проживёт до закрытия вкладки */
+  }
+}
+
+let token: string | null = DEMO ? null : readStorage(TOKEN_KEY);
+
+export function hasSession(): boolean {
+  return token !== null;
+}
+
+// Аккаунт, сохранённый с прошлого визита: показываем сразу, не дожидаясь сервера
+export function cachedAccount(): Account | null {
+  if (!token) return null;
+  try {
+    const raw = readStorage(ACCOUNT_KEY);
+    return raw ? (JSON.parse(raw) as Account) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Вход или выход в другой вкладке: перечитываем хранилище
+export function syncSession(): Account | null {
+  token = readStorage(TOKEN_KEY);
+  return cachedAccount();
+}
+
+function saveSession(newToken: string, account: Account) {
+  token = newToken;
+  writeStorage(TOKEN_KEY, newToken);
+  writeStorage(ACCOUNT_KEY, JSON.stringify(account));
+}
+
+export function logout() {
+  token = null;
+  writeStorage(TOKEN_KEY, null);
+  writeStorage(ACCOUNT_KEY, null);
+}
+
+// В токене записан id пользователя (поле sub). Это не секрет: токен подписан, но не зашифрован.
+function tokenUserId(jwt: string): number | null {
+  try {
+    const part = jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(part.padEnd(Math.ceil(part.length / 4) * 4, "=")));
+    const id = Number(payload.sub);
+    return Number.isInteger(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+// GET /me. Пока этого эндпоинта нет на сервере, берём id из токена и спрашиваем GET /users/{id}.
+async function fetchAccount(jwt: string, timeoutMs: number): Promise<Account> {
+  try {
+    return await request<Account>("/me", { auth: true, timeoutMs });
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.code !== "not_found") throw e;
+    const id = tokenUserId(jwt);
+    if (id === null) throw e;
+    return await request<Account>(`/users/${id}`, { timeoutMs });
+  }
+}
+
+// Если на сервере ещё нет регистрации и входа, он отвечает 404 — говорим об этом понятно
+function authError(e: unknown): unknown {
+  return e instanceof ApiError && e.code === "not_found" ? new ApiError("auth_unavailable", e.status) : e;
+}
+
+// POST /users — регистрация
+export async function register(data: { name: string; phone: string; password: string }): Promise<Account> {
+  if (DEMO) throw new ApiError("auth_unavailable");
+  try {
+    return await request<Account>("/users", { method: "POST", body: data, timeoutMs: PATIENT });
+  } catch (e) {
+    throw authError(e);
+  }
+}
+
+// POST /login — вход. known — аккаунт, который мы уже знаем (сразу после регистрации).
+export async function login(phone: string, password: string, known?: Account): Promise<Account> {
+  if (DEMO) throw new ApiError("auth_unavailable");
+  let jwt: string;
+  try {
+    const res = await request<{ access_token: string }>("/login", {
+      method: "POST",
+      body: { phone, password },
+      timeoutMs: PATIENT,
+    });
+    jwt = res.access_token;
+  } catch (e) {
+    throw authError(e);
+  }
+  token = jwt;
+  let account: Account;
+  try {
+    account = await fetchAccount(jwt, QUICK);
+  } catch (e) {
+    if (!known) {
+      token = null;
+      throw e;
+    }
+    account = known;
+  }
+  saveSession(jwt, account);
+  return account;
+}
+
+// Проверяем сохранённый вход при открытии сайта.
+// Вернёт аккаунт; null — входа нет; бросит not_authenticated — токен устарел, нужно войти снова.
+export async function restoreSession(): Promise<Account | null> {
+  const jwt = token;
+  if (!jwt) return null;
+  try {
+    const account = await fetchAccount(jwt, PATIENT);
+    if (token === jwt) saveSession(jwt, account);
+    return account;
+  } catch (e) {
+    if (e instanceof ApiError && (e.code === "not_authenticated" || e.code === "user_not_found")) {
+      if (token === jwt) logout();
+      throw new ApiError("not_authenticated", e.status);
+    }
+    return cachedAccount(); // сервер недоступен — остаёмся с тем, что знали
+  }
+}
+
+// ---------- Откуда данные ----------
+// "live" — с сервера, "demo" — примеры из памяти.
+let source: "unknown" | "live" | "demo" = DEMO ? "demo" : "unknown";
+let deciding: Promise<void> | null = null;
+let waking = false;
+let loadedAt = 0;
+
+// Состояние для интерфейса:
+// loading — первые секунды, ещё ждём ответа; live — данные с сервера;
+// waking — сервер просыпается, показаны примеры; offline — сервер не ответил, показаны примеры;
+// demo — режим прототипа.
+export type ServerState = "loading" | "live" | "waking" | "offline" | "demo";
+export function serverState(): ServerState {
+  if (DEMO) return "demo";
+  if (source === "live") return "live";
+  if (source === "unknown") return "loading";
+  return waking ? "waking" : "offline";
+}
+
+// Сервер «проснулся» или перестал отвечать — сообщаем приложению, чтобы оно перерисовалось
+const listeners = new Set<() => void>();
+export function onLive(cb: () => void) {
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
+}
+function notify() {
+  listeners.forEach((cb) => cb());
 }
 
 // Уборка с сервера — без полей, которых в таблице cleanups пока нет
 type ApiCleanup = Omit<Cleanup, "participants" | "joined" | "after_image">;
 function fromApi(c: ApiCleanup): Cleanup {
-  return { ...c, participants: 1, joined: false, after_image: null };
+  // Сервер пока не считает участников: показываем одного — организатора
+  return { ...c, participants: 1, joined: myCleanups.has(c.id), after_image: null };
 }
+// Уборки, которые человек создал в этом визите: он организатор, значит «идёт»
+const myCleanups = new Set<number>();
 
-// Сервер «проснулся» и отдал данные — сообщаем приложению, чтобы оно перерисовалось
-let waking = false;
-export function isWaking() {
-  return waking;
-}
-const liveListeners = new Set<() => void>();
-export function onLive(cb: () => void) {
-  liveListeners.add(cb);
-  return () => {
-    liveListeners.delete(cb);
-  };
-}
-
-async function loadLive(timeoutMs: number): Promise<boolean> {
+async function loadLive(timeoutMs: number): Promise<void> {
   const [s, c] = await Promise.all([
-    request<Spot[]>("/spots", undefined, timeoutMs),
-    request<ApiCleanup[]>("/cleanups", undefined, timeoutMs),
+    request<Spot[]>("/spots", { timeoutMs }),
+    request<ApiCleanup[]>("/cleanups", { timeoutMs }),
   ]);
-  if (!Array.isArray(s) || s.length === 0) return false; // база пустая — оставляем демо
+  if (!Array.isArray(s) || !Array.isArray(c)) throw new ApiError("server");
   spots = s;
   cleanups = c.map(fromApi);
   source = "live";
-  return true;
+  loadedAt = Date.now();
 }
 
-// Бесплатный Render засыпает и просыпается до минуты.
-// Пока он просыпается, показываем демо, а сервер ждём в фоне и потом переключаемся.
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Ждём сервер в фоне и переключаемся на настоящие данные, когда он ответит
+const isLive = () => source === "live";
 async function wakeServer() {
+  if (waking || isLive()) return;
   waking = true;
-  liveListeners.forEach((cb) => cb());
-  for (let attempt = 0; attempt < 3; attempt++) {
+  notify();
+  for (let attempt = 0; attempt < 3 && !isLive(); attempt++) {
     try {
-      if (await loadLive(60000)) {
-        waking = false;
-        liveListeners.forEach((cb) => cb());
-        return;
-      }
-      break; // сервер ответил, но мест нет — ждать нечего
+      await loadLive(60000);
     } catch {
-      /* ещё не проснулся — пробуем снова */
+      await pause(3000); // ещё не проснулся — пробуем снова
     }
   }
   waking = false;
-  liveListeners.forEach((cb) => cb());
+  notify();
 }
 
-// Пробуем сервер быстро; если не ответил за 4 секунды — демо, а сервер ждём в фоне
+// Кнопка «Повторить», когда сервер так и не ответил
+export function retryServer() {
+  void wakeServer();
+}
+
+// Пробуем сервер быстро; не ответил за 4 секунды — показываем примеры, а сервер ждём в фоне
 function decide(): Promise<void> {
   if (!deciding) {
     deciding = (async () => {
+      if (DEMO) return;
       try {
-        if (!(await loadLive(4000))) source = "demo";
+        await loadLive(4000);
       } catch {
         source = "demo";
         void wakeServer();
@@ -100,19 +356,26 @@ function decide(): Promise<void> {
   return deciding;
 }
 
-// Изменения, которых сервер пока не умеет хранить (участие, завершение уборки)
-const spotPatch = new Map<number, Partial<Spot>>();
-const cleanupPatch = new Map<number, Partial<Cleanup>>();
-function patchSpots(list: Spot[]) {
-  return list.map((s) => ({ ...s, ...spotPatch.get(s.id) }));
+// Свежие данные с сервера. Несколько вызовов подряд дают один запрос.
+let refreshing: Promise<void> | null = null;
+function refresh(): Promise<void> {
+  if (!refreshing) {
+    refreshing = loadLive(QUICK)
+      .catch(() => {
+        /* сервер не ответил — показываем последнее, что знали */
+      })
+      .finally(() => {
+        refreshing = null;
+      });
+  }
+  return refreshing;
 }
-function patchCleanups(list: Cleanup[]) {
-  return list.map((c) => {
-    const prev = cleanups.find((x) => x.id === c.id);
-    return { ...c, ...(prev ? { participants: prev.participants, joined: prev.joined } : {}), ...cleanupPatch.get(c.id) };
-  });
+async function fresh() {
+  await decide();
+  if (source === "live" && Date.now() - loadedAt > 1500) await refresh();
 }
 
+// ---------- Примеры (режим прототипа и пока сервер просыпается) ----------
 const now = new Date();
 function daysAgo(n: number): string {
   return new Date(now.getTime() - n * 86400000).toISOString();
@@ -233,7 +496,8 @@ let cleanups: Cleanup[] = [
   },
 ];
 
-let user: User = {
+// Демо-профиль — только для режима прототипа
+let demoUser: User = {
   name: "Ерасыл",
   coins: 1240,
   xp: 1240,
@@ -258,52 +522,44 @@ export const COINS = {
   markSpot: 5,
 };
 
-// Небольшая пауза, чтобы вести себя как настоящий сервер
-const wait = () => new Promise((r) => setTimeout(r, 150));
+// Небольшая пауза, чтобы прототип вёл себя как настоящий сервер
+const wait = () => pause(150);
 
+// ---------- Места и уборки ----------
 // GET /spots
 export async function getSpots(): Promise<Spot[]> {
-  await decide();
-  if (source === "live") {
-    try {
-      spots = await request<Spot[]>("/spots");
-    } catch {
-      /* сервер не ответил — показываем последнее, что знали */
-    }
-    return patchSpots(spots);
-  }
-  await wait();
+  await fresh();
   return [...spots];
 }
 
 // GET /cleanups
 export async function getCleanups(): Promise<Cleanup[]> {
-  await decide();
-  if (source === "live") {
-    try {
-      const list = await request<ApiCleanup[]>("/cleanups");
-      cleanups = patchCleanups(list.map(fromApi));
-    } catch {
-      /* сервер не ответил — показываем последнее, что знали */
-    }
-    return [...cleanups];
-  }
-  await wait();
+  await fresh();
   return [...cleanups];
 }
 
-// GET /me
-export async function getMe(): Promise<User> {
+// Демо-профиль (только режим прототипа). Настоящий аккаунт приходит из login() и restoreSession().
+export async function getDemoUser(): Promise<User> {
   await wait();
-  return { ...user };
+  return { ...demoUser };
 }
 
-// GET /rating
+// GET /rating — пока пример
 export async function getRating(): Promise<Player[]> {
   await wait();
-  return [...players, { name: user.name, coins: user.xp, me: true }].sort(
-    (a, b) => b.coins - a.coins,
-  );
+  const list = DEMO ? [...players, { name: demoUser.name, coins: demoUser.xp, me: true }] : [...players];
+  return list.sort((a, b) => b.coins - a.coins);
+}
+
+// После успешной отправки, если до этого показывались примеры, переходим на данные сервера
+async function switchToLive(fallback: () => void) {
+  try {
+    await loadLive(QUICK);
+  } catch {
+    fallback();
+    source = "live";
+    loadedAt = Date.now();
+  }
 }
 
 // POST /spots
@@ -315,28 +571,32 @@ export async function createSpot(data: {
   image: string;
   trash_level: TrashLevel;
 }): Promise<Spot> {
-  await decide();
-  if (source === "live") {
-    // Длины как в models.py: title — 40, description — 120 символов
-    const body = {
+  if (DEMO) {
+    await wait();
+    const spot: Spot = {
       ...data,
-      title: data.title.slice(0, 40),
-      description: data.description ? data.description.slice(0, 120) : null,
+      id: Math.max(0, ...spots.map((s) => s.id)) + 1,
+      status: "dirty",
+      created_at: new Date().toISOString(),
     };
-    const spot = await request<Spot>("/spots", { method: "POST", body: JSON.stringify(body) });
     spots = [...spots, spot];
-    user = { ...user, coins: user.coins + COINS.markSpot, xp: user.xp + COINS.markSpot, spots_marked: user.spots_marked + 1 };
+    demoUser = {
+      ...demoUser,
+      coins: demoUser.coins + COINS.markSpot,
+      xp: demoUser.xp + COINS.markSpot,
+      spots_marked: demoUser.spots_marked + 1,
+    };
     return spot;
   }
-  await wait();
-  const spot: Spot = {
-    ...data,
-    id: Math.max(0, ...spots.map((s) => s.id)) + 1,
-    status: "dirty",
-    created_at: new Date().toISOString(),
-  };
-  spots = [...spots, spot];
-  user = { ...user, coins: user.coins + COINS.markSpot, xp: user.xp + COINS.markSpot, spots_marked: user.spots_marked + 1 };
+  const spot = await request<Spot>("/spots", { method: "POST", body: data, auth: true, timeoutMs: PATIENT });
+  if (source === "live") {
+    spots = [...spots, spot];
+  } else {
+    await switchToLive(() => {
+      spots = [spot];
+      cleanups = [];
+    });
+  }
   return spot;
 }
 
@@ -347,85 +607,82 @@ export async function createCleanup(data: {
   gathering_place: string | null;
   chat_link: string | null;
 }): Promise<Cleanup> {
-  await decide();
-  if (source === "live") {
-    const body = {
+  if (DEMO) {
+    await wait();
+    const cleanup: Cleanup = {
       ...data,
-      gathering_place: data.gathering_place ? data.gathering_place.slice(0, 80) : null,
-      chat_link: data.chat_link ? data.chat_link.slice(0, 200) : null,
+      id: Math.max(0, ...cleanups.map((c) => c.id)) + 1,
+      status: "planned",
+      created_at: new Date().toISOString(),
+      participants: 1,
+      joined: true,
+      after_image: null,
     };
-    const created = fromApi(await request<ApiCleanup>("/cleanups", { method: "POST", body: JSON.stringify(body) }));
-    const cleanup = { ...created, joined: true };
-    cleanupPatch.set(cleanup.id, { joined: true, participants: 1 });
     cleanups = [...cleanups, cleanup];
     return cleanup;
   }
-  await wait();
-  const cleanup: Cleanup = {
-    ...data,
-    id: Math.max(0, ...cleanups.map((c) => c.id)) + 1,
-    status: "planned",
-    created_at: new Date().toISOString(),
-    participants: 1,
-    joined: true,
-    after_image: null,
-  };
+  const created = await request<ApiCleanup>("/cleanups", {
+    method: "POST",
+    body: data,
+    auth: true,
+    timeoutMs: PATIENT,
+  });
+  myCleanups.add(created.id);
+  const cleanup = fromApi(created);
   cleanups = [...cleanups, cleanup];
   return cleanup;
 }
 
+// Запись на уборку, выход и завершение работают только в прототипе.
+// Когда появятся эндпоинты — напишите запросы здесь и включите их в config.ts → SERVER_CAN.
+
 // POST /cleanups/{id}/join
 export async function joinCleanup(id: number): Promise<Cleanup> {
+  if (!DEMO) throw new ApiError("unknown");
   await wait();
   cleanups = cleanups.map((c) =>
     c.id === id && !c.joined ? { ...c, joined: true, participants: c.participants + 1 } : c,
   );
-  const joined = cleanups.find((c) => c.id === id)!;
-  cleanupPatch.set(id, { ...cleanupPatch.get(id), joined: joined.joined, participants: joined.participants });
-  return joined;
+  return cleanups.find((c) => c.id === id)!;
 }
 
 // POST /cleanups/{id}/leave
 export async function leaveCleanup(id: number): Promise<Cleanup> {
+  if (!DEMO) throw new ApiError("unknown");
   await wait();
   cleanups = cleanups.map((c) =>
     c.id === id && c.joined ? { ...c, joined: false, participants: c.participants - 1 } : c,
   );
-  const left = cleanups.find((c) => c.id === id)!;
-  cleanupPatch.set(id, { ...cleanupPatch.get(id), joined: left.joined, participants: left.participants });
-  return left;
+  return cleanups.find((c) => c.id === id)!;
 }
 
 // POST /cleanups/{id}/finish — фото «после», место становится чистым
 export async function finishCleanup(id: number, afterImage: string): Promise<Cleanup> {
+  if (!DEMO) throw new ApiError("unknown");
   await wait();
   const cleanup = cleanups.find((c) => c.id === id)!;
-  cleanups = cleanups.map((c) =>
-    c.id === id ? { ...c, status: "done", after_image: afterImage } : c,
-  );
+  cleanups = cleanups.map((c) => (c.id === id ? { ...c, status: "done", after_image: afterImage } : c));
   spots = spots.map((s) => (s.id === cleanup.spot_id ? { ...s, status: "clean" } : s));
-  cleanupPatch.set(id, { ...cleanupPatch.get(id), status: "done", after_image: afterImage });
-  spotPatch.set(cleanup.spot_id, { status: "clean" });
-  user = {
-    ...user,
-    coins: user.coins + COINS.participant,
-    xp: user.xp + COINS.participant,
-    cleanups_done: user.cleanups_done + 1,
-    hours: user.hours + 2,
+  demoUser = {
+    ...demoUser,
+    coins: demoUser.coins + COINS.participant,
+    xp: demoUser.xp + COINS.participant,
+    cleanups_done: demoUser.cleanups_done + 1,
+    hours: demoUser.hours + 2,
   };
   return cleanups.find((c) => c.id === id)!;
 }
 
 // ---------- Магазин наград ----------
-// Партнёры — примеры для демо. Настоящие появятся после запуска:
-// промокоды покупаются на грант и у партнёров, а игроки меняют на них монеты.
+// Пока примеры (demo: true — тексты лежат в словарях i18n: reward_1_title и т.д.).
+// Настоящие партнёры и промокоды появятся после запуска.
 const rewards: Reward[] = [
-  { id: 1, title: "Кофе в подарок", partner: "Кафе-партнёр", description: "Любой кофе среднего размера", price: 300, kind: "promo" },
-  { id: 2, title: "−1 000 ₸ на доставку еды", partner: "Сервис доставки", description: "Промокод на первый заказ от 4 000 ₸", price: 500, kind: "promo" },
-  { id: 3, title: "Скидка 20% на абонемент", partner: "Спортзал-партнёр", description: "Абонемент на месяц", price: 800, kind: "discount" },
-  { id: 4, title: "Билет в кино", partner: "Кинотеатр-партнёр", description: "Один билет на любой сеанс в будни", price: 900, kind: "promo" },
-  { id: 5, title: "Сертификат волонтёра", partner: "TazaMap", description: "Именной сертификат для портфолио", price: 1000, kind: "merch" },
-  { id: 6, title: "Футболка TazaMap", partner: "TazaMap", description: "Для самых активных — выдаём на уборке", price: 1500, kind: "merch" },
+  { id: 1, title: "", partner: "", description: "", price: 300, kind: "promo", demo: true },
+  { id: 2, title: "", partner: "", description: "", price: 500, kind: "promo", demo: true },
+  { id: 3, title: "", partner: "", description: "", price: 800, kind: "discount", demo: true },
+  { id: 4, title: "", partner: "", description: "", price: 900, kind: "promo", demo: true },
+  { id: 5, title: "", partner: "", description: "", price: 1000, kind: "merch", demo: true },
+  { id: 6, title: "", partner: "", description: "", price: 1500, kind: "merch", demo: true },
 ];
 
 let purchases: Purchase[] = [];
@@ -449,13 +706,14 @@ export async function getPurchases(): Promise<Purchase[]> {
   return [...purchases];
 }
 
-// POST /rewards/{id}/buy — списывает монеты, возвращает промокод
+// POST /rewards/{id}/buy — списывает монеты, возвращает промокод (пока только в прототипе)
 export async function buyReward(id: number): Promise<Purchase> {
+  if (!DEMO) throw new ApiError("unknown");
   await wait();
   const reward = rewards.find((r) => r.id === id);
-  if (!reward) throw new Error("Награда не найдена");
-  if (user.coins < reward.price) throw new Error("Не хватает монет");
-  user = { ...user, coins: user.coins - reward.price };
+  if (!reward) throw new ApiError("reward_not_found");
+  if (demoUser.coins < reward.price) throw new ApiError("not_enough_coins");
+  demoUser = { ...demoUser, coins: demoUser.coins - reward.price };
   const purchase: Purchase = {
     id: purchases.length + 1,
     reward_id: reward.id,

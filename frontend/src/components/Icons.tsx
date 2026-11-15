@@ -57,3 +57,18 @@ export const ZoomOutIcon = ({ size = 18 }: P) => (
 export const HomeIcon = ({ size = 22 }: P) => (
   <svg {...base(size)}><path d="M4 11 12 4l8 7" /><path d="M6 10v10h12V10" /><path d="M10 20v-5h4v5" /></svg>
 );
+export const GearIcon = ({ size = 20 }: P) => (
+  <svg {...base(size)}><circle cx="12" cy="12" r="3" /><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8" /></svg>
+);
+export const EyeIcon = ({ size = 20 }: P) => (
+  <svg {...base(size)}><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+);
+export const EyeOffIcon = ({ size = 20 }: P) => (
+  <svg {...base(size)}><path d="M4 4l16 16" /><path d="M9.9 5.2A9.6 9.6 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.6 8.5 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.5 4.5-1.2" /><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" /></svg>
+);
+export const LogoutIcon = ({ size = 18 }: P) => (
+  <svg {...base(size)}><path d="M10 4H5v16h5" /><path d="M14 8l4 4-4 4M18 12H9" /></svg>
+);
+export const CloseIcon = ({ size = 20 }: P) => (
+  <svg {...base(size)} strokeWidth={2.4}><path d="M6 6l12 12M18 6 6 18" /></svg>
+);

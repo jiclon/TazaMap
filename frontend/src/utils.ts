@@ -1,42 +1,26 @@
+import { ApiError } from "./api";
+import type { DictKey } from "./i18n";
 import type { Cleanup, Spot, TrashLevel } from "./types";
 
-export const TRASH_LABEL: Record<TrashLevel, string> = {
-  low: "Немного мусора",
-  medium: "Средне",
-  high: "Мусора много",
-};
+// Тексты лежат в словарях (src/i18n). Здесь — только ключи и расчёты.
 
-// Уровень игрока: каждые 200 монет — новый уровень
+export function trashKey(level: TrashLevel): DictKey {
+  return `trash_${level}`;
+}
+
+// Уровень игрока: каждые 200 очков — новый уровень
 export const COINS_PER_LEVEL = 200;
-export function levelOf(coins: number) {
-  const level = Math.floor(coins / COINS_PER_LEVEL) + 1;
+export function levelOf(xp: number) {
+  const level = Math.floor(xp / COINS_PER_LEVEL) + 1;
   const from = (level - 1) * COINS_PER_LEVEL;
   const to = level * COINS_PER_LEVEL;
-  return { level, progress: (coins - from) / (to - from), to };
+  return { level, progress: (xp - from) / (to - from), to };
 }
 
-const TITLES = ["Новичок", "Помощник", "Активист", "Дворовый герой", "Чистильщик", "Страж района", "Хранитель парка", "Легенда города"];
-export function titleOf(level: number) {
-  return TITLES[Math.min(level, TITLES.length) - 1];
-}
-
-export function formatNumber(n: number) {
-  return n.toLocaleString("ru-RU");
-}
-
-export function formatDateTime(iso: string) {
-  const d = new Date(iso);
-  const day = d.toLocaleDateString("ru-RU", { weekday: "short", day: "numeric", month: "long" });
-  const time = d.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
-  return `${day}, ${time}`;
-}
-
-export function timeAgo(iso: string) {
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
-  if (days <= 0) return "сегодня";
-  if (days === 1) return "вчера";
-  if (days < 5) return `${days} дня назад`;
-  return `${days} дней назад`;
+// Звание по уровню: title_1 … title_8 в словаре
+const TITLES: DictKey[] = ["title_1", "title_2", "title_3", "title_4", "title_5", "title_6", "title_7", "title_8"];
+export function titleKey(level: number): DictKey {
+  return TITLES[Math.min(Math.max(level, 1), TITLES.length) - 1];
 }
 
 export function plannedCleanupFor(spot: Spot, cleanups: Cleanup[]) {
@@ -49,18 +33,54 @@ export function spotState(spot: Spot, cleanups: Cleanup[]): SpotState {
   if (spot.status === "clean") return "clean";
   return plannedCleanupFor(spot, cleanups) ? "planned" : "dirty";
 }
-export const STATE_LABEL: Record<SpotState, string> = {
-  dirty: "Грязно",
-  planned: "Уборка назначена",
-  clean: "Убрано",
-};
-
-export function initials(name: string) {
-  return name.slice(0, 2).toUpperCase();
+export function stateKey(state: SpotState): DictKey {
+  return `state_${state}`;
 }
 
-// Фото с телефона → строка data:, чтобы показать сразу.
-// Потом фото будет загружаться на сервер (Cloudinary/S3).
+export function initials(name: string) {
+  return name.trim().slice(0, 2).toUpperCase();
+}
+
+// Ошибка → ключ текста в словаре
+export function errorKey(e: unknown): DictKey {
+  if (!(e instanceof ApiError)) return "e_unknown";
+  switch (e.code) {
+    case "phone_taken": return "e_phone_taken";
+    case "invalid_credentials": return "e_invalid_credentials";
+    case "invalid_phone": return "e_phone";
+    case "invalid_name":
+    case "invalid_password":
+    case "invalid_input": return "e_invalid_input";
+    case "not_authenticated":
+    case "user_not_found": return "e_session";
+    case "network": return "e_network";
+    case "timeout": return "e_timeout";
+    case "too_many": return "e_too_many";
+    case "auth_unavailable": return "e_auth_unavailable";
+    case "server": return "e_server";
+    case "not_enough_coins": return "e_not_enough_coins";
+    case "reward_not_found": return "e_reward_not_found";
+    default: return "e_unknown";
+  }
+}
+
+// Телефон. Храним 10 цифр после +7, показываем как «+7 700 123 45 67».
+// Понимает и набор по одной цифре, и вставку «8 (700) 123-45-67» или «+77001234567».
+export function phoneDigits(raw: string): string {
+  let d = (raw.trim().startsWith("+7") ? raw.trim().slice(2) : raw).replace(/\D/g, "");
+  // 11 цифр: человек набрал номер вместе с «8» или «7» в начале (8 700… или 7 700…) — убираем её.
+  // Номер после +7 начинается с 6, 7 или 9, поэтому лишнюю цифру в конце с этим не спутать.
+  if (d.length === 11 && (d[0] === "8" || (d[0] === "7" && "679".includes(d[1])))) d = d.slice(1);
+  return d.slice(0, 10);
+}
+export function formatPhone(digits: string): string {
+  if (!digits) return "";
+  const parts = [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 8), digits.slice(8, 10)].filter(Boolean);
+  return `+7 ${parts.join(" ")}`;
+}
+
+// Фото с телефона → строка data:, чтобы показать сразу и отправить на сервер.
+// Потом фото будет загружаться в хранилище (Cloudinary/S3).
 export function readPhoto(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -75,7 +95,10 @@ export function readPhoto(file: File): Promise<string> {
       URL.revokeObjectURL(url);
       resolve(canvas.toDataURL("image/jpeg", 0.8));
     };
-    img.onerror = reject;
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("photo"));
+    };
     img.src = url;
   });
 }
