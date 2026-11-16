@@ -92,6 +92,7 @@ export function NewSpotScreen({ latitude, longitude }: { latitude: number; longi
           />
         </label>
         {photoNeeded && !image && <p className="field-hint">{t("photo_required")}</p>}
+        <p className="field-hint">{t("photo_rules")}</p>
 
         <p className="muted small coords">
           <PinIcon /> {latitude.toFixed(4)}° N, {longitude.toFixed(4)}° E

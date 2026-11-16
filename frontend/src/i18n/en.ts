@@ -333,4 +333,5 @@ export const en: Dict = {
   faq_a8: "Litter is hidden under the snow, so mark what is visible: overflowing bins and dump sites. Big cleanups start in spring.",
   faq_q9: "I want to become a partner or help the project",
   faq_a9: "Write to us on Instagram @tazamap. We are looking for partners with discounts, volunteers and a frontend developer.",
+  photo_rules: "Photograph the litter, not people. No faces, car plates or other people’s windows: everyone will see the photo.",
 };
