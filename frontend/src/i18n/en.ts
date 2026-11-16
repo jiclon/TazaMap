@@ -335,4 +335,5 @@ export const en: Dict = {
   faq_a9: "Write to us on Instagram @tazamap. We are looking for partners with discounts, volunteers and a frontend developer.",
   photo_rules: "Photograph the litter, not people. No faces, car plates or other people’s windows: everyone will see the photo.",
   marking_soon: "Marking places is still in development. We will open it in spring, once the snow melts.",
+  cleanups_soon: "Cleanups start in spring, once the snow melts.",
 };

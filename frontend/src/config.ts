@@ -13,6 +13,9 @@ export const DEMO: boolean = import.meta.env.MODE === "single" || import.meta.en
 // Откроется вместе с проверкой фото администратором. Поставьте true, чтобы включить.
 export const MARKING_OPEN = false;
 
+// Организация уборок закрыта на зиму: под снегом убирать нечего.
+export const CLEANUPS_OPEN = false;
+
 // Отмечать места и создавать уборки можно только после входа.
 // Должно совпадать с бэкендом: если POST /spots требует токен — здесь true.
 export const REQUIRE_LOGIN = true;

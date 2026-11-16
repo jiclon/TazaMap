@@ -3,6 +3,7 @@ import { useI18n } from "../i18n";
 import { Photo, TopBar } from "../components/Common";
 import { CoinIcon } from "../components/Icons";
 import { COINS, serverState } from "../api";
+import { CLEANUPS_OPEN } from "../config";
 import { plannedCleanupFor, spotState, stateKey, trashKey } from "../utils";
 
 export function SpotScreen({ id }: { id: number }) {
@@ -62,15 +63,19 @@ export function SpotScreen({ id }: { id: number }) {
       </div>
       {state === "dirty" && (
         <div className="bottom-actions column">
-          <button
-            className="btn primary big"
-            onClick={() => {
-              if (example) showToast(t("example_spot_hint"));
-              else requireAuth(() => go({ name: "newCleanup", spotId: spot.id }));
-            }}
-          >
-            {t("organize")}
-          </button>
+          {CLEANUPS_OPEN ? (
+            <button
+              className="btn primary big"
+              onClick={() => {
+                if (example) showToast(t("example_spot_hint"));
+                else requireAuth(() => go({ name: "newCleanup", spotId: spot.id }));
+              }}
+            >
+              {t("organize")}
+            </button>
+          ) : (
+            <p className="muted small center">{t("cleanups_soon")}</p>
+          )}
         </div>
       )}
     </div>
