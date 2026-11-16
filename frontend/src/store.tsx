@@ -1,7 +1,7 @@
 // Общее состояние приложения: данные с сервера, аккаунт и навигация между экранами.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as api from "./api";
-import { DEMO, REQUIRE_LOGIN } from "./config";
+import { DEMO, MARKING_OPEN, REQUIRE_LOGIN } from "./config";
 import { useI18n } from "./i18n";
 import type { Account, Cleanup, Spot, User } from "./types";
 
@@ -176,11 +176,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
 
   const startMarking = useCallback(() => {
+    // Отметка мест закрыта (config.ts → MARKING_OPEN): честно говорим об этом
+    if (!MARKING_OPEN) {
+      showToast(tRef.current("marking_soon"));
+      return;
+    }
     requireAuth(() => {
       setHistory([{ name: "map" }]);
       setPicking(true);
     }, "mark");
-  }, [requireAuth, setPicking]);
+  }, [requireAuth, setPicking, showToast]);
 
   // Профиль для экранов. В прототипе — демо. В обычном режиме — из аккаунта:
   // монет и статистики на сервере пока нет, поэтому показываем только то, что знаем точно.

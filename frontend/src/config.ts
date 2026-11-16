@@ -9,6 +9,10 @@ export const API_BASE: string = import.meta.env.VITE_API_BASE ?? "https://tazama
 // В обычной сборке (Vercel) выключен: аккаунт и данные берутся только с сервера.
 export const DEMO: boolean = import.meta.env.MODE === "single" || import.meta.env.VITE_DEMO === "1";
 
+// Отметка мест закрыта: фото берётся из галереи, а модерации пока нет.
+// Откроется вместе с проверкой фото администратором. Поставьте true, чтобы включить.
+export const MARKING_OPEN = false;
+
 // Отмечать места и создавать уборки можно только после входа.
 // Должно совпадать с бэкендом: если POST /spots требует токен — здесь true.
 export const REQUIRE_LOGIN = true;

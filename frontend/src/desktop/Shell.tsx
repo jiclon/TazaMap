@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useStore, type Screen } from "../store";
 import { useI18n, type DictKey } from "../i18n";
 import * as api from "../api";
-import { DEMO } from "../config";
+import { DEMO, MARKING_OPEN } from "../config";
 import { CoinsBadge } from "../components/Common";
 import { PrivacyDialog, SettingsDialog } from "../components/Dialogs";
 import { CalendarIcon, ChartIcon, GearIcon, HomeIcon, MapIcon, PlusIcon, ShopIcon, UserIcon } from "../components/Icons";
@@ -84,7 +84,7 @@ export function Shell({ detail, desktop }: { detail: ReactNode; desktop: boolean
           <button className="round-btn" onClick={() => openDialog("settings")} aria-label={t("settings")}>
             <GearIcon />
           </button>
-          {desktop && (
+          {desktop && MARKING_OPEN && (
             <button className="btn primary" onClick={startMarking}>
               <PlusIcon size={18} />
               {t("mark_trash")}

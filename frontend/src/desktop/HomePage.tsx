@@ -3,7 +3,7 @@ import { useI18n } from "../i18n";
 import { CityMap } from "../components/CityMap";
 import { CoinIcon } from "../components/Icons";
 import { COINS } from "../api";
-import { DEMO, PROMO_FIRST_20 } from "../config";
+import { DEMO, MARKING_OPEN, PROMO_FIRST_20 } from "../config";
 import { CleanupCard } from "./CleanupsPage";
 import type { DictKey } from "../i18n";
 
@@ -35,7 +35,9 @@ export function HomePage() {
           <p className="hero-sub">{t("hero_sub")}</p>
           <div className="hero-actions">
             <button className="btn primary big-inline" onClick={() => tab({ name: "map" })}>{t("open_map")}</button>
-            <button className="btn ghost big-inline" onClick={startMarking}>{t("mark_trash")}</button>
+            {MARKING_OPEN && (
+              <button className="btn ghost big-inline" onClick={startMarking}>{t("mark_trash")}</button>
+            )}
           </div>
         </div>
         <div

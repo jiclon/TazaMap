@@ -3,6 +3,7 @@ import { useI18n } from "../i18n";
 import { CityMap } from "../components/CityMap";
 import { PlusIcon } from "../components/Icons";
 import { COINS } from "../api";
+import { MARKING_OPEN } from "../config";
 import { spotState, stateKey, trashKey } from "../utils";
 
 // На телефоне карта внутри экрана. На компьютере карта справа (см. MapPage.tsx),
@@ -108,10 +109,14 @@ export function MapScreen({ desktop = false }: { desktop?: boolean }) {
         <>
           {nextCard}
           <div className="action-row">
-            <button className="btn primary big" onClick={startMarking}>
-              <PlusIcon />
-              {t("mark_trash")}
-            </button>
+            {MARKING_OPEN ? (
+              <button className="btn primary big" onClick={startMarking}>
+                <PlusIcon />
+                {t("mark_trash")}
+              </button>
+            ) : (
+              <p className="muted small center">{t("marking_soon")}</p>
+            )}
           </div>
         </>
       )}
