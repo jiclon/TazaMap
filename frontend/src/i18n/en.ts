@@ -264,8 +264,7 @@ export const en: Dict = {
   busy_register: "Creating account…",
   busy_login: "Signing in…",
   waking_hint: "The server is waking up. This can take up to a minute, please keep the page open.",
-  promo_first20:
-    "The first 20 people who sign up and mark their first spot get 100 coins. We’ll add the coins after we check the spot.",
+  promo_first20: "The first 20 members who sign up get 100 coins. We will add them once phone confirmation is ready.",
   need_login_to_mark: "To mark a spot, sign in or create an account.",
   need_login: "Sign in or create an account to continue.",
   registered_login_now: "Account created. Now sign in.",
