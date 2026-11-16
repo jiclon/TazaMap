@@ -65,7 +65,7 @@ export interface Reward {
   description: string;
   price: number; // в монетах
   kind: "promo" | "discount" | "merch";
-  demo?: boolean; // пример награды: тексты берутся из словаря (reward_1_title и т.д.)
+  localized?: boolean; // тексты берутся из словаря (reward_1_title и т.д.), а не из полей выше
 }
 
 // Таблица purchases — что пользователь купил

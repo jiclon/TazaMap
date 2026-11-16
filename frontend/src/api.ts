@@ -683,15 +683,13 @@ export async function finishCleanup(id: number, afterImage: string): Promise<Cle
 }
 
 // ---------- Магазин наград ----------
-// Пока примеры (demo: true — тексты лежат в словарях i18n: reward_1_title и т.д.).
-// Настоящие партнёры и промокоды появятся после запуска.
+// Партнёры проекта. Названия и условия лежат в словарях i18n (reward_1_title и т.д.),
+// чтобы их было видно на всех трёх языках: localized: true.
+// Цены в монетах можно менять прямо здесь, в поле price.
 const rewards: Reward[] = [
-  { id: 1, title: "", partner: "", description: "", price: 300, kind: "promo", demo: true },
-  { id: 2, title: "", partner: "", description: "", price: 500, kind: "promo", demo: true },
-  { id: 3, title: "", partner: "", description: "", price: 800, kind: "discount", demo: true },
-  { id: 4, title: "", partner: "", description: "", price: 900, kind: "promo", demo: true },
-  { id: 5, title: "", partner: "", description: "", price: 1000, kind: "merch", demo: true },
-  { id: 6, title: "", partner: "", description: "", price: 1500, kind: "merch", demo: true },
+  { id: 1, title: "", partner: "", description: "", price: 500, kind: "discount", localized: true },
+  { id: 2, title: "", partner: "", description: "", price: 200, kind: "discount", localized: true },
+  { id: 3, title: "", partner: "", description: "", price: 350, kind: "discount", localized: true },
 ];
 
 let purchases: Purchase[] = [];

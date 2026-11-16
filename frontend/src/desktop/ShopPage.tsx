@@ -33,8 +33,8 @@ export function ShopPage() {
   const coins = user?.coins ?? 0;
 
   // У наград-примеров тексты лежат в словаре: reward_1_title, reward_1_partner, reward_1_text
-  const text = (r: { id: number; demo?: boolean }, part: "title" | "partner" | "text", own: string) =>
-    r.demo ? t(`reward_${r.id}_${part}` as DictKey) : own;
+  const text = (r: { id: number; localized?: boolean }, part: "title" | "partner" | "text", own: string) =>
+    r.localized ? t(`reward_${r.id}_${part}` as DictKey) : own;
 
   async function buy(reward: Reward) {
     setBusy(true);
