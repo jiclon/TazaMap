@@ -17,7 +17,8 @@ class Spot(Base):
     status: Mapped[str] = mapped_column(String(20), default="dirty")
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     cleanups: Mapped[list["Cleanup"]] = relationship(back_populates="spot")
-    
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
 class Cleanup(Base):
     __tablename__ = "cleanups"
 

@@ -15,6 +15,7 @@ class SpotOut(SpotCreate):
     id: int 
     status: str 
     created_at: datetime
+    user_id: int | None = None
     model_config = ConfigDict(from_attributes=True)
 
 class CleanupCreate(BaseModel):

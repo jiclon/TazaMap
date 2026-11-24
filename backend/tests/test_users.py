@@ -79,3 +79,33 @@ def test_password_not_in_response(client):
     assert response.status_code == 201 
     assert "password" not in response.json()
     assert "password_hash" not in response.json()
+
+def test_create_spot_without_token(client):
+    data = {"title": "Тестовая", "latitude": 45.543, "longitude": 59.234, "image": "test.jpg", "trash_level": "средний" }
+    response = client.post("/spots", json=data)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "not_authenticated"
+
+
+def test_create_spot_with_bad_token(client):
+    data = {"title": "Тестовая", "latitude": 45.743, "longitude": 59.294, "image": "test.jpg", "trash_level": "средний"}
+    headers={"Authorization": "Bearer abracadabra"}
+    response = client.post("/spots", json=data, headers=headers)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "not_authenticated"
+
+def test_create_spot_with_valid_token(client): 
+    user_data = {"phone": "+77010000009", "name": "Симпл", "password": "12345678"}
+    login_data = {"phone": "+77010000009", "password": "12345678"}
+    reg = client.post("/users", json=user_data)
+    login = client.post("/login", json=login_data)
+    token = login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"} 
+    spot_data = {"title": "Тестовая", "latitude": 45.443, "longitude": 67.294, "image": "test.jpg", "trash_level": "средний"}
+    response = client.post("/spots", json=spot_data, headers=headers)
+    assert response.status_code == 201
+    assert response.json()["user_id"] == reg.json()["id"]
+
+
+
+
